@@ -22,10 +22,13 @@ connectCloudinary();
 scheduleNewsJob().catch(err => console.error(err));
 
 app.use(helmet());
+
+// 🔥 FIX 1: Allow frontend properly
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: "*", // allow all for now (important)
   credentials: true
 }));
+
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
@@ -33,6 +36,11 @@ app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 200
 }));
+
+// 🔥 FIX 2: Add root route (for testing)
+app.get('/', (req, res) => {
+  res.send('Chirp API is running 🚀');
+});
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
