@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  min-height: 100%;
+}
+
+body {
+  font-family: 'Manrope', sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(0,93,166,0.28), transparent 30%),
+    radial-gradient(circle at top right, rgba(56,189,248,0.12), transparent 22%),
+    linear-gradient(180deg, #020617 0%, #07111f 55%, #020617 100%);
+  color: #e2e8f0;
+}
+
+.glass {
+  background: rgba(15, 23, 42, 0.58);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  backdrop-filter: blur(18px);
+}
+
+.glass-soft {
+  background: rgba(15, 23, 42, 0.42);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  backdrop-filter: blur(16px);
+}
+
+.liquid-hover {
+  transition: transform .2s ease, box-shadow .2s ease, background-color .2s ease, color .2s ease;
+}
+
+.liquid-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(0,93,166,0.22);
+}
+
+.material-symbols-outlined.fill {
+  font-variation-settings: 'FILL' 1, 'wght' 700, 'GRAD' 0, 'opsz' 24;
+}
