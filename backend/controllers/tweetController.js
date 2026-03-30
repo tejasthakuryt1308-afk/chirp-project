@@ -184,3 +184,13 @@ exports.searchTweets = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+exports.searchTweetsInternal = async (q) => {
+  if (!q) return [];
+
+  const tweets = await Tweet.find({
+    text: { $regex: q, $options: 'i' }
+  }).limit(20);
+
+  return tweets;
+};
