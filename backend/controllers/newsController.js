@@ -2,7 +2,9 @@ const axios = require('axios');
 
 exports.refreshNews = async (req, res) => {
   try {
-    const { data } = await axios.get(`https://newsapi.org/v2/top-headlines?country=us&apiKey=${process.env.NEWS_API_KEY}`);
+    const { data } = await axios.get(
+      `https://newsapi.org/v2/top-headlines?country=us&apiKey=${process.env.NEWS_API_KEY}`
+    );
 
     const articles = data.articles.map((a, i) => ({
       _id: i.toString(),
@@ -11,11 +13,26 @@ exports.refreshNews = async (req, res) => {
       createdAt: new Date(),
       isNewsArticle: true,
       articleUrl: a.url,
-    author: {
-             name: a.source.name,
-             handle: a.source.name.toLowerCase().replace(/\s/g, ''),
-             avatar: `https://logo.clearbit.com/${a.url?.split('/')[2] || 'bbc.com'}`
-    }
+
+      // 🔥 FIXED AUTHOR (logo + name)
+      author: {
+        name: a.source?.name || 'News',
+        handle: (a.source?.name || 'news')
+          .toLowerCase()
+          .replace(/\s/g, ''),
+        avatar: `https://logo.clearbit.com/${
+          a.url?.split('/')[2] || 'bbc.com'
+        }`
+      },
+
+      // 🔥 RANDOM ENGAGEMENT (MAIN FIX)
+      likesCount: Math.floor(Math.random() * 500) + 10,
+      retweetsCount: Math.floor(Math.random() * 200) + 5,
+      repliesCount: Math.floor(Math.random() * 100) + 2,
+
+      // optional flags for UI
+      isLiked: false,
+      isRetweeted: false
     }));
 
     res.json(articles);
@@ -36,7 +53,9 @@ exports.getByCategory = async (req, res) => {
   const category = req.params.category;
 
   try {
-    const { data } = await axios.get(`https://newsapi.org/v2/top-headlines?country=us&category=${category}&apiKey=${process.env.NEWS_API_KEY}`);
+    const { data } = await axios.get(
+      `https://newsapi.org/v2/top-headlines?country=us&category=${category}&apiKey=${process.env.NEWS_API_KEY}`
+    );
 
     res.json(data.articles);
   } catch (err) {
@@ -48,7 +67,9 @@ exports.getBySource = async (req, res) => {
   const source = req.params.source;
 
   try {
-    const { data } = await axios.get(`https://newsapi.org/v2/top-headlines?sources=${source}&apiKey=${process.env.NEWS_API_KEY}`);
+    const { data } = await axios.get(
+      `https://newsapi.org/v2/top-headlines?sources=${source}&apiKey=${process.env.NEWS_API_KEY}`
+    );
 
     res.json(data.articles);
   } catch (err) {
