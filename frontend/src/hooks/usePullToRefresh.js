@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 
 export const usePullToRefresh = (onRefresh) => {
-  const [startY, setStartY] = useState(0);
   const [pulling, setPulling] = useState(false);
 
   useEffect(() => {
@@ -27,7 +26,9 @@ export const usePullToRefresh = (onRefresh) => {
     const handleTouchEnd = async () => {
       if (pulling) {
         setPulling(false);
-        await onRefresh();
+        if (onRefresh) {
+          await onRefresh();
+        }
       }
     };
 
@@ -44,19 +45,3 @@ export const usePullToRefresh = (onRefresh) => {
 
   return pulling;
 };
-
-// Usage in your Home component:
-const refreshFeed = async () => {
-  showToast('Refreshing feed...', 'info');
-  await fetchTweets();
-  showToast('Feed refreshed!', 'success');
-};
-
-const pulling = usePullToRefresh(refreshFeed);
-
-// Show indicator
-{pulling && (
-  <div className="fixed top-16 left-1/2 transform -translate-x-1/2 z-50">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-  </div>
-)}
