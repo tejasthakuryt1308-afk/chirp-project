@@ -11,11 +11,11 @@ exports.refreshNews = async (req, res) => {
       createdAt: new Date(),
       isNewsArticle: true,
       articleUrl: a.url,
-      author: {
-        name: a.source.name,
-        handle: a.source.name.toLowerCase().replace(/\s/g, ''),
-        avatar: `https://logo.clearbit.com/${a.source.name.toLowerCase().replace(/\s/g, '')}.com`
-      }
+    author: {
+             name: a.source.name,
+             handle: a.source.name.toLowerCase().replace(/\s/g, ''),
+             avatar: `https://logo.clearbit.com/${a.url?.split('/')[2] || 'bbc.com'}`
+    }
     }));
 
     res.json(articles);
