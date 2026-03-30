@@ -1,10 +1,11 @@
+// 1. Fixed the capital 'I' here:
 import { useEffect, useMemo, useState } from 'react';
 import api from '../utils/api';
 import Composer from '../components/Tweet/Composer';
 import TweetCard from '../components/Tweet/TweetCard';
 import Loading from '../components/Common/Loading';
 import { useAuth } from '../context/AuthContext';
-import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import { usePullToRefresh } from '../hooks/usePullToRefresh'; // Make sure this file is renamed to .jsx!
 
 export default function Home() {
   const { user } = useAuth();
@@ -20,7 +21,9 @@ export default function Home() {
   };
 
   useEffect(() => { load(); }, [category]);
-  usePullToRefresh(load);
+  
+  // 2. Capture the 'pulling' state from your custom hook
+  const pulling = usePullToRefresh(load);
 
   const trends = useMemo(() => [
     { label: '#startup', count: 124 },
@@ -52,7 +55,15 @@ export default function Home() {
   };
 
   return (
-    <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6 pb-24 lg:pb-8">
+    <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6 pb-24 lg:pb-8 relative">
+      
+      {/* 3. The Pull-to-Refresh Indicator */}
+      {pulling && (
+        <div className="fixed top-16 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 bg-white shadow-lg flex items-center justify-center p-1"></div>
+        </div>
+      )}
+
       <div className="hidden lg:block w-80 shrink-0">
         <div className="sticky top-24 space-y-6">
           <div className="glass rounded-[28px] p-4">
