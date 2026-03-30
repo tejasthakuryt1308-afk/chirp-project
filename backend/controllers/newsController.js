@@ -1,50 +1,34 @@
-const Tweet = require('../models/Tweet');
-const NewsSource = require('../models/NewsSource');
-const { newsApi } = require('../config/newsapi');
+const axios = require('axios');
 
-const categoryMap = {
-  general: 'general',
-  sports: 'sports',
-  entertainment: 'entertainment',
-  business: 'business',
-  technology: 'technology',
-  science: 'science',
-  health: 'health',
-  world: 'general',
-  conflict: 'general'
-};
-
-exports.getSources = async (req, res) => {
-  const sources = await NewsSource.find().sort({ name: 1 });
-  res.json(sources);
-};
-
-exports.getByCategory = async (req, res) => {
-  const category = (req.params.category || 'general').toLowerCase();
-  const tweets = await Tweet.find({ isNewsArticle: true, category }).sort({ createdAt: -1 }).limit(50).populate('author', 'name handle avatar verified');
-  res.json(tweets);
-};
-
-exports.getBySource = async (req, res) => {
-  const source = (req.params.source || '').toLowerCase();
-  const tweets = await Tweet.find({ isNewsArticle: true, newsSource: source }).sort({ createdAt: -1 }).limit(50).populate('author', 'name handle avatar verified');
-  res.json(tweets);
-};
+const NEWS_API = `https://newsapi.org/v2/top-headlines?country=us&apiKey=${process.env.NEWS_API_KEY}`;
 
 exports.refreshNews = async (req, res) => {
   try {
-    if (!process.env.NEWS_API_KEY) return res.status(503).json({ message: 'NEWS_API_KEY missing' });
-    const client = newsApi();
-    const category = req.query.category || 'general';
-    const apiCategory = categoryMap[category] || 'general';
-    const response = await client.v2.topHeadlines({
-      language: 'en',
-      category: apiCategory,
-      pageSize: 20
+    const { data } = await axios.get(NEWS_API);
+
+    const articles = data.articles.map((a, i) => {
+      const domain = new URL(a.url).hostname;
+
+      return {
+        _id: i + Date.now(),
+        text: a.title,
+        image: a.urlToImage,
+        createdAt: new Date(),
+        user: {
+          name: a.source.name,
+          handle: domain.replace('www.', ''),
+          avatar: `https://logo.clearbit.com/${domain}`
+        },
+        likes: Math.floor(Math.random() * 500),
+        comments: Math.floor(Math.random() * 100),
+        retweets: Math.floor(Math.random() * 200)
+      };
     });
 
-    res.json(response.articles || []);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.json({ items: articles });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to fetch news' });
   }
 };
