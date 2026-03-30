@@ -35,12 +35,16 @@ export default function Signup() {
   });
 
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const submit = async (e) => {
     e.preventDefault();
+    setError('');
+    setSuccess('');
 
     if (form.password !== form.confirmPassword) {
-      return alert('Passwords do not match ❌');
+      return setError('Passwords do not match ❌');
     }
 
     try {
@@ -52,21 +56,26 @@ export default function Signup() {
         email: form.email,
         password: form.password,
         bio: form.bio,
-        avatar: form.avatar
+
+        // ✅ AUTO GENERATE CLEAN AVATAR
+        avatar: `https://ui-avatars.com/api/?name=${form.name}&background=0D8ABC&color=fff`
       };
 
       await signup(payload);
 
-      alert("Signup successful ✅");
+      setSuccess('Account created successfully 🚀');
 
-      navigate('/');
+      // small delay for UX
+      setTimeout(() => {
+        navigate('/');
+      }, 1000);
 
     } catch (err) {
       console.error(err);
 
-      alert(
+      setError(
         err.response?.data?.message ||
-        "Signup failed ❌ (maybe user already exists)"
+        "Signup failed ❌ (email or handle already exists)"
       );
     } finally {
       setLoading(false);
@@ -87,7 +96,21 @@ export default function Signup() {
     >
       <form onSubmit={submit} className="space-y-3">
 
-        {['name','handle','email','password','confirmPassword','bio','avatar'].map((k) => (
+        {/* ✅ ERROR UI */}
+        {error && (
+          <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        {/* ✅ SUCCESS UI */}
+        {success && (
+          <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-3 text-sm text-green-300">
+            {success}
+          </div>
+        )}
+
+        {['name','handle','email','password','confirmPassword','bio'].map((k) => (
           k === 'bio' ? (
             <textarea
               key={k}
