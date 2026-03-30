@@ -23,7 +23,7 @@
     "nodemailer": "^6.9.16",
     "newsapi": "^2.4.1",
     "slugify": "^1.6.6",
-    "uuid": "^11.0.3"
+    "uuid": "^11.0.3", 
     "axios": "^1.6.0"
   },
   "devDependencies": {
