@@ -6,7 +6,10 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true, select: false },
   handle: { type: String, unique: true, index: true, required: true, trim: true },
   bio: { type: String, maxlength: 160, default: '' },
-  avatar: { type: String, default: '' },
+  avatar: { 
+  type: String, 
+  default: 'https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff' 
+},
   coverPhoto: { type: String, default: '' },
   location: { type: String, default: '' },
   website: { type: String, default: '' },
