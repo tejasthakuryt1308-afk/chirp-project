@@ -1,152 +1,223 @@
-import { useEffect, useState } from 'react';
-import Modal from '../Common/Modal';
-import api from '../../utils/api';
-
-export default function EditProfile({ open, onClose, user, onSaved }) {
-
-  const [form, setForm] = useState({
-    name: '',
-    bio: '',
-    location: '',
-    website: '',
-    avatar: '',
-    coverPhoto: ''
+// In your Edit Profile component
+const EditProfile = () => {
+  const [formData, setFormData] = useState({
+    name: user.name,
+    bio: user.bio,
+    location: user.location || '',
+    website: user.website || ''
   });
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [coverFile, setCoverFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
 
-  const [previewAvatar, setPreviewAvatar] = useState('');
-  const [previewCover, setPreviewCover] = useState('');
-
-  useEffect(() => {
-    if (user) {
-      setForm({
-        name: user.name || '',
-        bio: user.bio || '',
-        location: user.location || '',
-        website: user.website || '',
-        avatar: user.avatar || '',
-        coverPhoto: user.coverPhoto || ''
-      });
-
-      setPreviewAvatar(user.avatar || '');
-      setPreviewCover(user.coverPhoto || '');
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0];
+    if (file && file.size < 5000000) { // 5MB limit
+      setAvatarFile(file);
+    } else {
+      alert('File too large. Max 5MB');
     }
-  }, [user]);
-
-  // ✅ HANDLE IMAGE UPLOAD
-  const handleImage = (file, type) => {
-    if (!file) return;
-
-    const reader = new FileReader();
-
-    reader.onloadend = () => {
-      if (type === 'avatar') {
-        setForm({ ...form, avatar: reader.result });
-        setPreviewAvatar(reader.result);
-      } else {
-        setForm({ ...form, coverPhoto: reader.result });
-        setPreviewCover(reader.result);
-      }
-    };
-
-    reader.readAsDataURL(file);
   };
 
-  const save = async () => {
+  const handleCoverChange = (e) => {
+    const file = e.target.files[0];
+    if (file && file.size < 5000000) {
+      setCoverFile(file);
+    } else {
+      alert('File too large. Max 5MB');
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setUploading(true);
+
     try {
-      const { data } = await api.put(`/users/${user._id}`, form);
-      onSaved?.(data);
-      onClose?.();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to update profile ❌");
+      let avatarUrl = user.avatar;
+      let coverUrl = user.coverPhoto;
+
+      // Upload avatar if changed
+      if (avatarFile) {
+        const formData = new FormData();
+        formData.append('image', avatarFile);
+        
+        const uploadRes = await fetch(`${API_URL}/upload/image`, {
+          method: 'POST',
+          headers: {
+            'x-auth-token': localStorage.getItem('token')
+          },
+          body: formData
+        });
+        const uploadData = await uploadRes.json();
+        avatarUrl = uploadData.url;
+      }
+
+      // Upload cover if changed
+      if (coverFile) {
+        const formData = new FormData();
+        formData.append('image', coverFile);
+        
+        const uploadRes = await fetch(`${API_URL}/upload/image`, {
+          method: 'POST',
+          headers: {
+            'x-auth-token': localStorage.getItem('token')
+          },
+          body: formData
+        });
+        const uploadData = await uploadRes.json();
+        coverUrl = uploadData.url;
+      }
+
+      // Update profile
+      const response = await fetch(`${API_URL}/users/${user._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-auth-token': localStorage.getItem('token')
+        },
+        body: JSON.stringify({
+          ...formData,
+          avatar: avatarUrl,
+          coverPhoto: coverUrl
+        })
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        showToast('Profile updated successfully!', 'success');
+        // Update user in state
+        setUser(data);
+        setShowEditModal(false);
+      }
+    } catch (error) {
+      showToast('Failed to update profile', 'error');
+    } finally {
+      setUploading(false);
     }
   };
 
   return (
-    <Modal open={open} onClose={onClose}>
-      <div className="p-6">
-        <div className="font-headline text-xl text-white">Edit Profile</div>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-[#1a1f2e] rounded-2xl p-6 max-w-md w-full border border-gray-700">
+        <h2 className="text-2xl font-bold text-white mb-4">Edit Profile</h2>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Avatar Upload */}
+          <div>
+            <label className="block text-gray-300 text-sm font-semibold mb-2">
+              Profile Picture
+            </label>
+            <div className="flex items-center gap-4">
+              <img 
+                src={avatarFile ? URL.createObjectURL(avatarFile) : user.avatar} 
+                className="w-20 h-20 rounded-full object-cover"
+                alt="Avatar preview"
+              />
+              <label className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                Choose File
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
 
-        <div className="mt-4 grid gap-3">
+          {/* Cover Photo Upload */}
+          <div>
+            <label className="block text-gray-300 text-sm font-semibold mb-2">
+              Cover Photo
+            </label>
+            <div className="flex items-center gap-4">
+              {(coverFile || user.coverPhoto) && (
+                <img 
+                  src={coverFile ? URL.createObjectURL(coverFile) : user.coverPhoto} 
+                  className="w-full h-32 rounded-lg object-cover"
+                  alt="Cover preview"
+                />
+              )}
+              <label className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 whitespace-nowrap">
+                Choose File
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={handleCoverChange}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
 
-          {/* NAME */}
-          <input
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white outline-none"
-            placeholder="Name"
-          />
-
-          {/* BIO */}
-          <textarea
-            value={form.bio}
-            onChange={(e) => setForm({ ...form, bio: e.target.value })}
-            className="min-h-28 rounded-2xl border border-white/10 bg-white/5 p-3 text-white outline-none"
-            placeholder="Bio"
-          />
-
-          {/* LOCATION */}
-          <input
-            value={form.location}
-            onChange={(e) => setForm({ ...form, location: e.target.value })}
-            className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white outline-none"
-            placeholder="Location"
-          />
-
-          {/* WEBSITE */}
-          <input
-            value={form.website}
-            onChange={(e) => setForm({ ...form, website: e.target.value })}
-            className="rounded-2xl border border-white/10 bg-white/5 p-3 text-white outline-none"
-            placeholder="Website"
-          />
-
-          {/* AVATAR UPLOAD */}
-          <div className="space-y-2">
-            <label className="text-sm text-slate-400">Profile Photo</label>
-            {previewAvatar && (
-              <img src={previewAvatar} className="h-16 w-16 rounded-full object-cover" />
-            )}
+          {/* Name */}
+          <div>
+            <label className="block text-gray-300 text-sm font-semibold mb-2">Name</label>
             <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => handleImage(e.target.files[0], 'avatar')}
-              className="text-white"
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({...formData, name: e.target.value})}
+              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
             />
           </div>
 
-          {/* COVER PHOTO UPLOAD */}
-          <div className="space-y-2">
-            <label className="text-sm text-slate-400">Cover Photo</label>
-            {previewCover && (
-              <img src={previewCover} className="h-24 w-full object-cover rounded-xl" />
-            )}
+          {/* Bio */}
+          <div>
+            <label className="block text-gray-300 text-sm font-semibold mb-2">Bio</label>
+            <textarea
+              value={formData.bio}
+              onChange={(e) => setFormData({...formData, bio: e.target.value})}
+              maxLength={160}
+              rows={3}
+              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white resize-none"
+            />
+            <p className="text-sm text-gray-500 mt-1">{formData.bio.length}/160</p>
+          </div>
+
+          {/* Location */}
+          <div>
+            <label className="block text-gray-300 text-sm font-semibold mb-2">Location</label>
             <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => handleImage(e.target.files[0], 'cover')}
-              className="text-white"
+              type="text"
+              value={formData.location}
+              onChange={(e) => setFormData({...formData, location: e.target.value})}
+              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+              placeholder="New York, USA"
             />
           </div>
 
-        </div>
+          {/* Website */}
+          <div>
+            <label className="block text-gray-300 text-sm font-semibold mb-2">Website</label>
+            <input
+              type="url"
+              value={formData.website}
+              onChange={(e) => setFormData({...formData, website: e.target.value})}
+              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+              placeholder="https://yourwebsite.com"
+            />
+          </div>
 
-        <div className="mt-5 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="rounded-2xl border border-white/10 px-4 py-2 text-white"
-          >
-            Cancel
-          </button>
-
-          <button
-            onClick={save}
-            className="rounded-2xl bg-brand-500 px-4 py-2 font-semibold text-white"
-          >
-            Save
-          </button>
-        </div>
+          {/* Buttons */}
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setShowEditModal(false)}
+              className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={uploading}
+              className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {uploading ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
       </div>
-    </Modal>
+    </div>
   );
-}
+};
