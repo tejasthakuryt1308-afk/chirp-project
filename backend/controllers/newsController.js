@@ -1,34 +1,57 @@
 const axios = require('axios');
 
-const NEWS_API = `https://newsapi.org/v2/top-headlines?country=us&apiKey=${process.env.NEWS_API_KEY}`;
-
 exports.refreshNews = async (req, res) => {
   try {
-    const { data } = await axios.get(NEWS_API);
+    const { data } = await axios.get(`https://newsapi.org/v2/top-headlines?country=us&apiKey=${process.env.NEWS_API_KEY}`);
 
-    const articles = data.articles.map((a, i) => {
-      const domain = new URL(a.url).hostname;
+    const articles = data.articles.map((a, i) => ({
+      _id: i.toString(),
+      text: a.title,
+      images: a.urlToImage ? [a.urlToImage] : [],
+      createdAt: new Date(),
+      isNewsArticle: true,
+      articleUrl: a.url,
+      author: {
+        name: a.source.name,
+        handle: a.source.name.toLowerCase().replace(/\s/g, ''),
+        avatar: `https://logo.clearbit.com/${a.source.name.toLowerCase().replace(/\s/g, '')}.com`
+      }
+    }));
 
-      return {
-        _id: i + Date.now(),
-        text: a.title,
-        image: a.urlToImage,
-        createdAt: new Date(),
-        user: {
-          name: a.source.name,
-          handle: domain.replace('www.', ''),
-          avatar: `https://logo.clearbit.com/${domain}`
-        },
-        likes: Math.floor(Math.random() * 500),
-        comments: Math.floor(Math.random() * 100),
-        retweets: Math.floor(Math.random() * 200)
-      };
-    });
-
-    res.json({ items: articles });
-
+    res.json(articles);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Failed to fetch news' });
+  }
+};
+
+exports.getSources = (req, res) => {
+  res.json([
+    { name: 'BBC News', handle: 'bbc' },
+    { name: 'Reuters', handle: 'reuters' }
+  ]);
+};
+
+exports.getByCategory = async (req, res) => {
+  const category = req.params.category;
+
+  try {
+    const { data } = await axios.get(`https://newsapi.org/v2/top-headlines?country=us&category=${category}&apiKey=${process.env.NEWS_API_KEY}`);
+
+    res.json(data.articles);
+  } catch (err) {
+    res.status(500).json({ message: 'Category fetch failed' });
+  }
+};
+
+exports.getBySource = async (req, res) => {
+  const source = req.params.source;
+
+  try {
+    const { data } = await axios.get(`https://newsapi.org/v2/top-headlines?sources=${source}&apiKey=${process.env.NEWS_API_KEY}`);
+
+    res.json(data.articles);
+  } catch (err) {
+    res.status(500).json({ message: 'Source fetch failed' });
   }
 };
