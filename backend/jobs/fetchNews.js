@@ -5,6 +5,8 @@ const Tweet = require('../models/Tweet');
 
 let isRunning = false;
 let lastFetchTime = 0;
+
+// ✅ 1 HOUR HARD COOLDOWN (VERY IMPORTANT)
 const FETCH_COOLDOWN = 60 * 60 * 1000;
 
 // ================= LOGOS =================
@@ -107,11 +109,13 @@ function cleanTitle(title) {
 // ================= MAIN FUNCTION =================
 async function fetchAndStoreNews() {
 
+  // ❌ prevent multiple runs
   if (isRunning) {
     console.log('⏸️ Already running');
     return;
   }
 
+  // ❌ cooldown protection
   const timePassed = Date.now() - lastFetchTime;
   if (timePassed < FETCH_COOLDOWN) {
     console.log('⏳ Cooldown active');
@@ -125,10 +129,18 @@ async function fetchAndStoreNews() {
     console.log('🔄 Fetching news...');
     console.log('🔑 API KEY:', process.env.NEWS_API_KEY ? 'Present' : 'Missing');
 
+    // ✅ SKIP IF ENOUGH DATA EXISTS (SUPER IMPORTANT)
+    const existingCount = await Tweet.countDocuments({ isNewsArticle: true });
+    if (existingCount > 40) {
+      console.log('🧠 Enough tweets in DB, skipping fetch');
+      isRunning = false;
+      return;
+    }
+
     const response = await axios.get('https://newsapi.org/v2/top-headlines', {
       params: {
         country: 'in',
-        pageSize: 20,
+        pageSize: 25,
         apiKey: process.env.NEWS_API_KEY
       },
       timeout: 10000
@@ -151,7 +163,7 @@ async function fetchAndStoreNews() {
     // ================= REMOVE DUPLICATES =================
     const seen = new Set();
     validArticles = validArticles.filter(a => {
-      const key = a.url + cleanTitle(a.title);
+      const key = a.url;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -226,10 +238,21 @@ async function cleanOldNews() {
   }
 }
 
-// ================= SCHEDULE =================
-setTimeout(fetchAndStoreNews, 5000);
+// ================= SAFE START =================
 
-cron.schedule('0 */2 * * *', fetchAndStoreNews);
+// ❌ REMOVED instant spam fetch
+// fetchAndStoreNews();
+
+// ✅ DELAYED SAFE START
+setTimeout(() => {
+  console.log("🚀 Initial safe fetch triggered");
+  fetchAndStoreNews();
+}, 15000);
+
+// ✅ CRON (every 1 hour ONLY)
+cron.schedule('0 * * * *', fetchAndStoreNews);
+
+// ✅ CLEAN DAILY
 cron.schedule('0 3 * * *', cleanOldNews);
 
 module.exports = fetchAndStoreNews;
