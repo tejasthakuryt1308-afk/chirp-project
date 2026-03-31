@@ -7,7 +7,7 @@ let isRunning = false;
 let lastFetchTime = 0;
 const FETCH_COOLDOWN = 60 * 60 * 1000;
 
-// ================= LOGO MAPPING =================
+// ================= LOGOS =================
 const NEWS_LOGOS = {
   'bbc': 'https://www.bbc.co.uk/favicon.ico',
   'cnn': 'https://cdn.cnn.com/cnn/.e/img/3.0/global/misc/cnn-logo.png',
@@ -16,12 +16,10 @@ const NEWS_LOGOS = {
   'ndtv': 'https://drop.ndtv.com/ndtv/images/ndtv_logo.png',
   'nyt': 'https://www.nytimes.com/favicon.ico',
   'techcrunch': 'https://techcrunch.com/wp-content/uploads/2015/02/cropped-cropped-favicon-gradient.png',
-  'verge': 'https://cdn.vox-cdn.com/uploads/chorus_asset/file/7395359/favicon-32x32.0.png',
   'guardian': 'https://assets.guim.co.uk/images/favicons/favicon-32x32.ico',
   'india today': 'https://akm-img-a-in.tosshub.com/sites/all/themes/itg/logo.png'
 };
 
-// ================= SAFE LOGO GETTER =================
 function getNewsLogo(sourceName) {
   if (!sourceName) return 'https://ui-avatars.com/api/?name=News';
 
@@ -42,7 +40,7 @@ function getNewsLogo(sourceName) {
   }
 }
 
-// ================= UTIL FUNCTIONS =================
+// ================= UTIL =================
 function random(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -53,10 +51,10 @@ function generateFakeIds(count) {
   );
 }
 
-// ================= COMMENT SYSTEM FIX =================
+// ================= COMMENTS =================
 const USERNAMES = [
-  "Aarav", "Riya", "Kabir", "Ananya", "Rahul",
-  "Sneha", "Vikram", "Neha", "Arjun", "Priya"
+  "Aarav", "Riya", "Kabir", "Ananya",
+  "Rahul", "Sneha", "Vikram", "Neha"
 ];
 
 const COMMENT_TEMPLATES = [
@@ -64,12 +62,10 @@ const COMMENT_TEMPLATES = [
   "This is huge 🔥",
   "Didn't expect this 😳",
   "Important news 📰",
-  "Thanks for sharing",
   "Crazy development 😮",
-  "This needs more attention",
   "Breaking news! 🚨",
   "Very informative",
-  "What's your opinion?"
+  "What do you think?"
 ];
 
 function generateComments() {
@@ -93,44 +89,33 @@ function generateComments() {
   });
 }
 
-// ================= IMAGE VALIDATION =================
+// ================= VALIDATION =================
 function isValidImage(url) {
-  if (!url) return false;
-  if (!url.startsWith('http')) return false;
+  if (!url || !url.startsWith('http')) return false;
 
-  const invalidPatterns = ['removed', 'default', 'null'];
-
-  return !invalidPatterns.some(p => url.toLowerCase().includes(p));
+  const bad = ['removed', 'default', 'null'];
+  return !bad.some(p => url.toLowerCase().includes(p));
 }
 
-// ================= TITLE CLEANER =================
 function cleanTitle(title) {
   if (!title || title === '[Removed]' || title.length < 15) {
     return null;
   }
-
   return title.replace(/ - .*$/, '').trim();
 }
-
-// ================= CATEGORIES =================
-const CATEGORIES = [
-  'general',
-  'business',
-  'technology',
-  'sports',
-  'entertainment',
-  'health',
-  'science'
-];
 
 // ================= MAIN FUNCTION =================
 async function fetchAndStoreNews() {
 
-  if (isRunning) return console.log('⏸️ Already running');
+  if (isRunning) {
+    console.log('⏸️ Already running');
+    return;
+  }
 
   const timePassed = Date.now() - lastFetchTime;
   if (timePassed < FETCH_COOLDOWN) {
-    return console.log('⏳ Cooldown active');
+    console.log('⏳ Cooldown active');
+    return;
   }
 
   isRunning = true;
@@ -138,35 +123,23 @@ async function fetchAndStoreNews() {
 
   try {
     console.log('🔄 Fetching news...');
+    console.log('🔑 API KEY:', process.env.NEWS_API_KEY ? 'Present' : 'Missing');
 
-    let allArticles = [];
+    const response = await axios.get('https://newsapi.org/v2/top-headlines', {
+      params: {
+        country: 'in',
+        pageSize: 20,
+        apiKey: process.env.NEWS_API_KEY
+      },
+      timeout: 10000
+    });
 
-    for (const category of CATEGORIES) {
-      try {
-        const res = await axios.get('https://newsapi.org/v2/top-headlines', {
-          params: {
-            country: 'in',
-            category,
-            pageSize: 8,
-            apiKey: process.env.NEWS_API_KEY
-          }
-        });
+    let articles = response.data?.articles || [];
 
-        if (res.data?.articles) {
-          allArticles.push(...res.data.articles.map(a => ({ ...a, category })));
-        }
-
-        await new Promise(r => setTimeout(r, 400));
-
-      } catch (err) {
-        console.log(`⚠️ ${category} failed`);
-      }
-    }
-
-    console.log(`📊 Total fetched: ${allArticles.length}`);
+    console.log(`📊 Total fetched: ${articles.length}`);
 
     // ================= FILTER =================
-    let validArticles = allArticles.filter(a =>
+    let validArticles = articles.filter(a =>
       a.url &&
       a.source?.name &&
       cleanTitle(a.title) &&
@@ -201,7 +174,7 @@ async function fetchAndStoreNews() {
           .replace(/[^a-z0-9]/g, '')
           .slice(0, 12);
 
-        const tweetData = {
+        await Tweet.create({
           text: cleanTitle(article.title),
           images: [{
             url: article.urlToImage,
@@ -213,15 +186,13 @@ async function fetchAndStoreNews() {
           newsHandle: handle,
           newsLogo: getNewsLogo(sourceName),
           articleUrl: article.url,
-          category: article.category,
           likes: generateFakeIds(random(100, 2000)),
           retweets: generateFakeIds(random(50, 500)),
           replies: generateComments(),
           verified: true,
           createdAt: new Date(article.publishedAt || Date.now())
-        };
+        });
 
-        await Tweet.create(tweetData);
         stored++;
 
       } catch (err) {
@@ -232,7 +203,7 @@ async function fetchAndStoreNews() {
     console.log(`✅ Stored: ${stored}`);
 
   } catch (err) {
-    console.log('❌ Error:', err.message);
+    console.log('❌ API ERROR:', err.response?.data || err.message);
   } finally {
     isRunning = false;
   }
@@ -242,14 +213,16 @@ async function fetchAndStoreNews() {
 async function cleanOldNews() {
   try {
     const date = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
     const res = await Tweet.deleteMany({
       isNewsArticle: true,
       createdAt: { $lt: date }
     });
 
     console.log(`🧹 Cleaned: ${res.deletedCount}`);
+
   } catch (err) {
-    console.log('⚠️ Clean error');
+    console.log('⚠️ Clean error:', err.message);
   }
 }
 
