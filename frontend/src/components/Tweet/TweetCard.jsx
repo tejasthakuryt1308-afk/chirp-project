@@ -1,127 +1,140 @@
-import { useNavigate } from 'react-router-dom';  
-import ImageGrid from './ImageGrid';  
-import TweetActions from './TweetActions';  
-import { formatCount, timeAgo } from '../../utils/helpers';  
+const cron = require('node-cron');
+const axios = require('axios');
+const mongoose = require('mongoose');
+const Tweet = require('../models/Tweet');
 
-export default function TweetCard({ item, onLike, onRetweet, onReply, onShare, onBookmark }) {  
-  const navigate = useNavigate();  
+// ✅ LOGO MAP (SAFE)
+const LOGO_MAP = {
+  'bbc': 'https://upload.wikimedia.org/wikipedia/commons/4/4c/BBC_News_2022_%28Alt%29.svg',
+  'cnn': 'https://upload.wikimedia.org/wikipedia/commons/6/66/CNN_International_logo.svg',
+  'reuters': 'https://upload.wikimedia.org/wikipedia/commons/8/86/Reuters_logo.svg',
+  'espn': 'https://upload.wikimedia.org/wikipedia/commons/2/2f/ESPN_wordmark.svg',
+  'ndtv': 'https://upload.wikimedia.org/wikipedia/commons/3/3a/NDTV_logo.svg'
+};
 
-  // ✅ SUPPORT BOTH BACKEND FORMATS  
-  const rawAuthor = item.author || item.user || {};  
+// ✅ FETCH MORE PER RUN
+const PAGE_SIZE = 20; // NewsAPI limit safe range
 
-  // ✅ CHECK IF NEWS  
-  const isNews = item.isNewsArticle;  
+const CATEGORIES = ['general'];
 
-  // ✅ CLEAN AUTHOR  
-  const author = {  
-    ...rawAuthor,  
-    name: isNews ? item.newsSource || rawAuthor.name || 'News' : rawAuthor.name,  
-    handle: isNews  
-      ? (item.newsSource || "news")  
-          .toLowerCase()  
-          .replace(/\s+/g, "")  
-          .replace(/[^a-z0-9]/g, "")  
-      : rawAuthor.handle || 'user'  
-  };  
-
-  // ✅ FAKE ENGAGEMENT (fallback)
-  const likes = item.likes ?? Math.floor(Math.random() * 500 + 10);  
-  const comments = item.comments ?? Math.floor(Math.random() * 100 + 5);  
-  const retweets = item.retweets ?? Math.floor(Math.random() * 200 + 5);  
-
-  // ✅ BACKEND LOGO FIRST (IMPORTANT)
-  const getNewsLogo = () => {
-    if (isNews && item.newsLogo) return item.newsLogo;
-
-    // ✅ FALLBACK LOGO (ALWAYS WORKS)
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      author.name || 'News'
-    )}&background=random&color=fff&size=128`;
-  };
-
-  const avatar =
-    rawAuthor.avatar ||
-    getNewsLogo() ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(author.name || 'User')}&background=0D8ABC&color=fff`;
-
-  return (  
-    <article className="glass rounded-[32px] p-5 shadow-glass">  
-
-      <div className="flex items-start gap-4">  
-
-        {/* PROFILE IMAGE */}
-        <button  
-          onClick={() => navigate(`/profile/${rawAuthor._id || rawAuthor.id || ''}`)}  
-          className="shrink-0"  
-        >  
-          <img  
-            src={avatar}  
-            className="h-12 w-12 rounded-full object-cover object-center bg-white"  
-            alt="avatar"  
-          />  
-        </button>  
-
-        <div className="min-w-0 flex-1">  
-
-          {/* HEADER */}  
-          <div className="flex items-center gap-2 text-sm text-slate-400">  
-
-            <button  
-              className="font-semibold text-white hover:underline"  
-              onClick={() => navigate(`/profile/${rawAuthor._id || rawAuthor.id || ''}`)}  
-            >  
-              {author.name || 'Unknown'}  
-            </button>  
-
-            <span className="lowercase">@{author.handle}</span>  
-
-            {rawAuthor.verified && (  
-              <span className="material-symbols-outlined fill text-brand-300 text-sm">  
-                verified  
-              </span>  
-            )}  
-
-            <span>·</span>  
-            <span>{timeAgo(item.createdAt)}</span>  
-          </div>  
-
-          {/* TEXT */}  
-          <p className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-100">  
-            {item.text}  
-          </p>  
-
-          {/* IMAGE */}  
-          {item.images?.length ? <ImageGrid images={item.images} /> : null}  
-
-          {/* ARTICLE */}  
-          {item.articleUrl && (  
-            <a  
-              href={item.articleUrl}  
-              target="_blank"  
-              rel="noreferrer"  
-              className="mt-3 inline-flex rounded-2xl bg-white/5 px-4 py-2 text-sm text-brand-200 hover:bg-white/10"  
-            >  
-              Read article  
-            </a>  
-          )}  
-
-          {/* ACTIONS */}  
-          <TweetActions  
-            item={{  
-              ...item,  
-              likes,  
-              comments,  
-              retweets  
-            }}  
-            onLike={() => onLike?.(item)}  
-            onRetweet={() => onRetweet?.(item)}  
-            onReply={() => onReply?.(item)}  
-            onShare={() => onShare?.(item)}  
-            onBookmark={() => onBookmark?.(item)}  
-          />  
-
-        </div>  
-      </div>  
-    </article>  
-  );  
+function getRandomComments(count) {
+  return Array(Math.min(count, 3)).fill(null).map(() => ({
+    user: new mongoose.Types.ObjectId(),
+    text: "Interesting update 👀",
+    createdAt: new Date()
+  }));
 }
+
+async function fetchAndStoreNews() {
+  try {
+    console.log("🔄 Fetching news...");
+
+    let allArticles = [];
+
+    // ✅ MULTIPLE PAGES (simulate 50+ posts)
+    for (let page = 1; page <= 3; page++) {
+      try {
+        const res = await axios.get('https://newsapi.org/v2/top-headlines', {
+          params: {
+            country: 'in',
+            category: 'general',
+            pageSize: PAGE_SIZE,
+            page: page,
+            apiKey: process.env.NEWS_API_KEY
+          }
+        });
+
+        allArticles = allArticles.concat(res.data.articles || []);
+      } catch (err) {
+        console.log("⚠️ API failed, using fallback");
+        break;
+      }
+    }
+
+    // ✅ FALLBACK if API fails completely
+    if (allArticles.length === 0) {
+      allArticles = [
+        {
+          title: "Fallback News 1",
+          url: "https://example.com/1",
+          urlToImage: "https://picsum.photos/600/400?1",
+          source: { name: "BBC" }
+        },
+        {
+          title: "Fallback News 2",
+          url: "https://example.com/2",
+          urlToImage: "https://picsum.photos/600/400?2",
+          source: { name: "CNN" }
+        }
+      ];
+    }
+
+    // ✅ REMOVE DUPLICATES (BIG FIX)
+    const seenUrls = new Set();
+
+    const uniqueArticles = allArticles.filter(article => {
+      if (!article.url || seenUrls.has(article.url)) return false;
+      seenUrls.add(article.url);
+      return true;
+    });
+
+    console.log(`🧠 Total unique articles: ${uniqueArticles.length}`);
+
+    // ✅ LIMIT TO 80 POSTS MAX
+    const articlesToStore = uniqueArticles.slice(0, 80);
+
+    for (const article of articlesToStore) {
+      if (!article.title) continue;
+
+      const exists = await Tweet.findOne({ articleUrl: article.url });
+      if (exists) continue;
+
+      const sourceName = article.source?.name || "News";
+
+      // ✅ LOGO MATCH
+      const matchedKey = Object.keys(LOGO_MAP).find(key =>
+        sourceName.toLowerCase().includes(key)
+      );
+
+      const logo = matchedKey
+        ? LOGO_MAP[matchedKey]
+        : `https://ui-avatars.com/api/?name=${encodeURIComponent(sourceName)}&background=random&color=fff&size=128`;
+
+      const handle = '@' + sourceName.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+
+      const likesCount = Math.floor(Math.random() * 500 + 20);
+      const retweetsCount = Math.floor(likesCount * 0.3);
+      const commentsCount = Math.floor(likesCount * 0.1);
+
+      await Tweet.create({
+        text: article.title,
+        images: article.urlToImage ? [{ url: article.urlToImage }] : [],
+        isNewsArticle: true,
+        newsSource: sourceName,
+        newsHandle: handle,
+        newsLogo: logo,
+        articleUrl: article.url,
+        category: 'general',
+
+        likes: Array.from({ length: likesCount }, () => new mongoose.Types.ObjectId()),
+        retweets: Array.from({ length: retweetsCount }, () => new mongoose.Types.ObjectId()),
+        replies: getRandomComments(commentsCount),
+
+        verified: true
+      });
+    }
+
+    console.log("✅ News stored successfully");
+
+  } catch (error) {
+    console.error("❌ News fetch error:", error.message);
+  }
+}
+
+// ✅ RUN ON START
+fetchAndStoreNews();
+
+// ✅ CRON (30 MIN)
+cron.schedule('*/30 * * * *', fetchAndStoreNews);
+
+module.exports = fetchAndStoreNews;
