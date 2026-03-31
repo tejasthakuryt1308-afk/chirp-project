@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const Tweet = require('../models/Tweet');
 const NewsSource = require('../models/NewsSource');
 
-// ✅ STABLE LOGOS (NO CLEARBIT DEPENDENCY)
+// ✅ STABLE LOGOS
 const LOGO_MAP = {
   'bbc news': 'https://upload.wikimedia.org/wikipedia/commons/4/4c/BBC_News_2022_%28Alt%29.svg',
   'cnn': 'https://upload.wikimedia.org/wikipedia/commons/6/66/CNN_International_logo.svg',
@@ -16,7 +16,7 @@ const LOGO_MAP = {
   'ndtv': 'https://upload.wikimedia.org/wikipedia/commons/3/3a/NDTV_logo.svg'
 };
 
-const CATEGORIES = ['general', 'sports', 'technology', 'business', 'entertainment', 'health', 'science'];
+const CATEGORIES = ['general', 'sports', 'technology']; // ✅ reduced calls
 
 function generateComments(count) {
   const templates = [
@@ -43,16 +43,32 @@ async function fetchAndStoreNews() {
   try {
     console.log('🔄 Fetching news...');
 
-    // Fetch news
     for (const category of CATEGORIES) {
-      const response = await axios.get('https://newsapi.org/v2/top-headlines', {
-        params: {
-          country: 'in',
-          category: category,
-          pageSize: 5,
-          apiKey: process.env.NEWS_API_KEY
+
+      // ✅ RATE LIMIT PROTECTION
+      await new Promise(res => setTimeout(res, 1200));
+
+      let response;
+
+      try {
+        response = await axios.get('https://newsapi.org/v2/top-headlines', {
+          params: {
+            country: 'in',
+            category: category,
+            pageSize: 5,
+            apiKey: process.env.NEWS_API_KEY
+          }
+        });
+      } catch (err) {
+        if (err.response?.status === 429) {
+          console.log('⏳ Rate limited, retrying...');
+          await new Promise(res => setTimeout(res, 3000));
+          continue;
+        } else {
+          console.error('❌ API error:', err.message);
+          continue;
         }
-      });
+      }
 
       for (const article of response.data.articles || []) {
         if (!article.title || article.title === '[Removed]') continue;
@@ -61,7 +77,7 @@ async function fetchAndStoreNews() {
         const sourceNameRaw = article.source?.name || "Unknown";
         const cleanName = sourceNameRaw.trim();
 
-        // ✅ EXTRACT DOMAIN SAFELY
+        // ✅ EXTRACT DOMAIN
         let domain = "";
         try {
           domain = new URL(article.url).hostname.replace("www.", "");
@@ -99,9 +115,9 @@ async function fetchAndStoreNews() {
           text: article.title,
           images: article.urlToImage ? [{ url: article.urlToImage }] : [],
           isNewsArticle: true,
-          newsSource: cleanName, // ✅ FIXED NAME
+          newsSource: cleanName,
           newsHandle: handle,
-          newsLogo: logo, // ✅ FIXED LOGO
+          newsLogo: logo,
           articleUrl: article.url,
           category: category,
           likes: Array.from({ length: likesCount }, () => new mongoose.Types.ObjectId()),
@@ -118,7 +134,12 @@ async function fetchAndStoreNews() {
   }
 }
 
-fetchAndStoreNews();
+// ✅ PREVENT DOUBLE EXECUTION ON RENDER
+if (process.env.NODE_ENV !== 'production') {
+  fetchAndStoreNews();
+}
+
+// ✅ CRON (EVERY 30 MIN)
 cron.schedule('*/30 * * * *', fetchAndStoreNews);
 
 module.exports = fetchAndStoreNews;
