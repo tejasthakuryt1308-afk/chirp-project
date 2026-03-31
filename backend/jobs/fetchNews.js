@@ -4,10 +4,10 @@ const mongoose = require('mongoose');
 const Tweet = require('../models/Tweet');
 
 let isRunning = false;
-let lastFetchTime = 0;
 
-// ✅ 1 HOUR HARD COOLDOWN (VERY IMPORTANT)
-const FETCH_COOLDOWN = 60 * 60 * 1000;
+// ✅ 55 MINUTE BUFFERED COOLDOWN
+// Reduced from 60 to 55 minutes to prevent race conditions with the 1-hour Cron job
+const FETCH_COOLDOWN = 55 * 60 * 1000; 
 
 // ================= LOGOS =================
 const NEWS_LOGOS = {
@@ -115,27 +115,26 @@ async function fetchAndStoreNews() {
     return;
   }
 
-  // ❌ cooldown protection
-  const timePassed = Date.now() - lastFetchTime;
-  if (timePassed < FETCH_COOLDOWN) {
-    console.log('⏳ Cooldown active');
-    return;
-  }
-
   isRunning = true;
-  lastFetchTime = Date.now();
 
   try {
     console.log('🔄 Fetching news...');
     console.log('🔑 API KEY:', process.env.NEWS_API_KEY ? 'Present' : 'Missing');
 
-    // ✅ SKIP IF ENOUGH DATA EXISTS (SUPER IMPORTANT)
-    const existingCount = await Tweet.countDocuments({ isNewsArticle: true });
-    if (existingCount > 40) {
-      console.log('🧠 Enough tweets in DB, skipping fetch');
-      isRunning = false;
-      return;
+    // ✅ DB-BACKED COOLDOWN PROTECTION
+    // This protects your API limits even if the server restarts!
+    const latestNews = await Tweet.findOne({ isNewsArticle: true }).sort({ createdAt: -1 });
+    if (latestNews) {
+        const timePassed = Date.now() - new Date(latestNews.createdAt).getTime();
+        if (timePassed < FETCH_COOLDOWN) {
+            console.log('⏳ Cooldown active: Fetched recently enough.');
+            isRunning = false;
+            return;
+        }
     }
+
+    // ❌ REMOVED the `existingCount > 40` check. 
+    // It was preventing new news from being fetched once your DB had 40 items.
 
     const response = await axios.get('https://newsapi.org/v2/top-headlines', {
       params: {
@@ -202,7 +201,8 @@ async function fetchAndStoreNews() {
           retweets: generateFakeIds(random(50, 500)),
           replies: generateComments(),
           verified: true,
-          createdAt: new Date(article.publishedAt || Date.now())
+          // Set createdAt to Date.now() to ensure our DB cooldown check works perfectly based on fetch time
+          createdAt: new Date() 
         });
 
         stored++;
@@ -224,6 +224,7 @@ async function fetchAndStoreNews() {
 // ================= CLEAN OLD =================
 async function cleanOldNews() {
   try {
+    // Keeps database size manageable without blocking new fetches
     const date = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const res = await Tweet.deleteMany({
@@ -240,10 +241,6 @@ async function cleanOldNews() {
 
 // ================= SAFE START =================
 
-// ❌ REMOVED instant spam fetch
-// fetchAndStoreNews();
-
-// ✅ DELAYED SAFE START
 setTimeout(() => {
   console.log("🚀 Initial safe fetch triggered");
   fetchAndStoreNews();
