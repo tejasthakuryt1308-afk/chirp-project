@@ -1,145 +1,147 @@
-const cron = require('node-cron');
-const axios = require('axios');
-const mongoose = require('mongoose');
-const Tweet = require('../models/Tweet');
+import { useNavigate } from 'react-router-dom';  
+import { useState } from 'react';
+import ImageGrid from './ImageGrid';  
+import TweetActions from './TweetActions';  
+import { timeAgo } from '../../utils/helpers';  
 
-// ✅ SAFE LOGO MAP
-const LOGO_MAP = {
-  'bbc news': 'https://upload.wikimedia.org/wikipedia/commons/4/4c/BBC_News_2022_%28Alt%29.svg',
-  'cnn': 'https://upload.wikimedia.org/wikipedia/commons/6/66/CNN_International_logo.svg',
-  'reuters': 'https://upload.wikimedia.org/wikipedia/commons/8/86/Reuters_logo.svg',
-  'espn': 'https://upload.wikimedia.org/wikipedia/commons/2/2f/ESPN_wordmark.svg',
-  'ndtv': 'https://upload.wikimedia.org/wikipedia/commons/3/3a/NDTV_logo.svg'
-};
+export default function TweetCard({ item, onLike, onRetweet, onReply, onShare, onBookmark }) {  
+  const navigate = useNavigate();  
 
-// ✅ KEEP LOW FOR SAFETY
-const CATEGORIES = ['general'];
+  const rawAuthor = item.author || item.user || {};  
+  const isNews = item.isNewsArticle;  
 
-function generateComments(count) {
-  const templates = [
-    "This is huge news! 🔥",
-    "Finally someone is covering this",
-    "Thanks for sharing 👍",
-    "Wow, didn't see this coming",
-    "This changes everything"
-  ];
+  const author = {  
+    ...rawAuthor,  
+    name: isNews ? item.newsSource || rawAuthor.name || 'News' : rawAuthor.name,  
+    handle: isNews  
+      ? (item.newsSource || "news")  
+          .toLowerCase()  
+          .replace(/\s+/g, "")  
+          .replace(/[^a-z0-9]/g, "")  
+      : rawAuthor.handle || 'user'  
+  };  
 
-  return Array(Math.min(count, 3)).fill(null).map(() => ({
-    user: new mongoose.Types.ObjectId(),
-    text: templates[Math.floor(Math.random() * templates.length)],
-    createdAt: new Date()
-  }));
-}
+  // ✅ LOCAL LIKE STATE
+  const [liked, setLiked] = useState(false);
 
-async function fetchAndStoreNews() {
-  try {
-    console.log('🔄 Fetching news...');
+  // ✅ FAKE COUNTS (fallback)
+  const [likes, setLikes] = useState(item.likes ?? Math.floor(Math.random() * 500 + 10));  
+  const comments = item.comments ?? Math.floor(Math.random() * 100 + 5);  
+  const retweets = item.retweets ?? Math.floor(Math.random() * 200 + 5);  
 
-    for (const category of CATEGORIES) {
+  // ✅ AVATAR FIX
+  const avatar =
+    rawAuthor.avatar ||
+    (isNews && item.newsLogo) ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(author.name || 'User')}&background=random&color=fff`;
 
-      await new Promise(res => setTimeout(res, 1000)); // ✅ delay
+  // ❤️ HANDLE LIKE CLICK
+  const handleLike = () => {
+    setLiked(!liked);
+    setLikes(prev => liked ? prev - 1 : prev + 1);
+    onLike?.(item);
+  };
 
-      let response;
+  // 💬 HANDLE COMMENT CLICK
+  const handleComment = () => {
+    onReply?.(item);
 
-      try {
-        response = await axios.get('https://newsapi.org/v2/top-headlines', {
-          params: {
-            country: 'in',
-            category,
-            pageSize: 15,
-            apiKey: process.env.NEWS_API_KEY
-          }
-        });
-      } catch (err) {
-        console.log('⚠️ Using fallback news (API blocked)');
+    // 👉 If you have comments UI → open it here
+    console.log("Open comments for:", item._id);
+  };
 
-        // ✅ FALLBACK DATA
-        response = {
-          data: {
-            articles: [
-              {
-                title: "Breaking: Market sees major shift in 2026",
-                url: "https://example.com/news1",
-                urlToImage: "https://picsum.photos/600/400?1",
-                source: { name: "Reuters" }
-              },
-              {
-                title: "Tech industry prepares for next big revolution",
-                url: "https://example.com/news2",
-                urlToImage: "https://picsum.photos/600/400?2",
-                source: { name: "BBC News" }
-              },
-              {
-                title: "Sports world reacts to unexpected results",
-                url: "https://example.com/news3",
-                urlToImage: "https://picsum.photos/600/400?3",
-                source: { name: "ESPN" }
-              }
-            ]
-          }
-        };
-      }
+  return (  
+    <article className="glass rounded-[32px] p-5 shadow-glass">  
 
-      for (const article of response.data.articles || []) {
-        if (!article.title) continue;
+      <div className="flex items-start gap-4">  
 
-        const existing = await Tweet.findOne({ articleUrl: article.url });
-        if (existing) continue;
+        {/* PROFILE IMAGE */}
+        <button  
+          onClick={() => navigate(`/profile/${rawAuthor._id || rawAuthor.id || ''}`)}  
+          className="shrink-0"  
+        >  
+          <img  
+            src={avatar}  
+            className="h-12 w-12 rounded-full object-cover object-center bg-white"  
+            alt="avatar"  
+          />  
+        </button>  
 
-        const cleanName = article.source?.name || "News";
+        <div className="min-w-0 flex-1">  
 
-        // ✅ MATCH LOGO
-        const matchedKey = Object.keys(LOGO_MAP).find(key =>
-          cleanName.toLowerCase().includes(key)
-        );
+          {/* HEADER */}  
+          <div className="flex items-center gap-2 text-sm text-slate-400">  
 
-        let logo = null;
+            <button  
+              className="font-semibold text-white hover:underline"  
+              onClick={() => navigate(`/profile/${rawAuthor._id || rawAuthor.id || ''}`)}  
+            >  
+              {author.name || 'Unknown'}  
+            </button>  
 
-if (matchedKey) {
-  logo = LOGO_MAP[matchedKey];
-} else {
-  // ✅ fallback: use avatar API (always works)
-  logo = `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=random&color=fff&size=128`;
-}
+            <span className="lowercase">@{author.handle}</span>  
 
-        const handle =
-          '@' +
-          cleanName
-            .toLowerCase()
-            .replace(/\s+/g, '')
-            .replace(/[^a-z0-9]/g, '');
+            {rawAuthor.verified && (  
+              <span className="material-symbols-outlined fill text-brand-300 text-sm">  
+                verified  
+              </span>  
+            )}  
 
-        const likesCount = Math.floor(Math.random() * 100) + 10;
-        const retweetsCount = Math.floor(likesCount * 0.3);
-        const repliesCount = Math.floor(likesCount * 0.1);
+            <span>·</span>  
+            <span>{timeAgo(item.createdAt)}</span>  
+          </div>  
 
-        await Tweet.create({
-          text: article.title,
-          images: article.urlToImage ? [{ url: article.urlToImage }] : [],
-          isNewsArticle: true,
-          newsSource: cleanName,
-          newsHandle: handle,
-          newsLogo: logo,
-          articleUrl: article.url,
-          category,
-          likes: Array.from({ length: likesCount }, () => new mongoose.Types.ObjectId()),
-          retweets: Array.from({ length: retweetsCount }, () => new mongoose.Types.ObjectId()),
-          replies: generateComments(repliesCount),
-          verified: true
-        });
-      }
-    }
+          {/* TEXT */}  
+          <p className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-100">  
+            {item.text}  
+          </p>  
 
-    console.log('✅ News stored');
-  } catch (error) {
-    console.error('❌ News fetch error:', error.message);
-  }
-}
+          {/* IMAGE */}  
+          {item.images?.length ? <ImageGrid images={item.images} /> : null}  
 
-// ✅ FORCE RUN ON DEPLOY (so feed never empty)
-fetchAndStoreNews();
+          {/* ARTICLE */}  
+          {item.articleUrl && (  
+            <a  
+              href={item.articleUrl}  
+              target="_blank"  
+              rel="noreferrer"  
+              className="mt-3 inline-flex rounded-2xl bg-white/5 px-4 py-2 text-sm text-brand-200 hover:bg-white/10"  
+            >  
+              Read article  
+            </a>  
+          )}  
 
-// ✅ CRON EVERY 30 MIN
-cron.schedule('*/30 * * * *', fetchAndStoreNews);
+          {/* ACTIONS (CUSTOMIZED) */}
+          <div className="mt-3 flex gap-6 text-sm text-slate-400">
 
-module.exports = fetchAndStoreNews;
+            {/* ❤️ LIKE */}
+            <button onClick={handleLike} className="flex items-center gap-1 hover:text-red-500">
+              <span className={`material-symbols-outlined ${liked ? 'text-red-500' : ''}`}>
+                favorite
+              </span>
+              <span>{likes}</span>
+            </button>
+
+            {/* 💬 COMMENT */}
+            <button onClick={handleComment} className="flex items-center gap-1 hover:text-blue-400">
+              <span className="material-symbols-outlined">
+                chat_bubble
+              </span>
+              <span>{comments}</span>
+            </button>
+
+            {/* 🔁 RETWEET */}
+            <button onClick={() => onRetweet?.(item)} className="flex items-center gap-1 hover:text-green-400">
+              <span className="material-symbols-outlined">
+                repeat
+              </span>
+              <span>{retweets}</span>
+            </button>
+
+          </div>
+
+        </div>  
+      </div>  
+    </article>  
+  );  
+                  }
