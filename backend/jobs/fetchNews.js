@@ -46,7 +46,7 @@ async function fetchAndStoreNews() {
           params: {
             country: 'in',
             category,
-            pageSize: 5,
+            pageSize: 15,
             apiKey: process.env.NEWS_API_KEY
           }
         });
@@ -93,7 +93,14 @@ async function fetchAndStoreNews() {
           cleanName.toLowerCase().includes(key)
         );
 
-        const logo = matchedKey ? LOGO_MAP[matchedKey] : null;
+        let logo = null;
+
+if (matchedKey) {
+  logo = LOGO_MAP[matchedKey];
+} else {
+  // ✅ fallback: use avatar API (always works)
+  logo = `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=random&color=fff&size=128`;
+}
 
         const handle =
           '@' +
