@@ -3,43 +3,39 @@ const axios = require('axios');
 const mongoose = require('mongoose');
 const Tweet = require('../models/Tweet');
 
-// ================= LOGO MAP =================
+let isRunning = false;
+
+// ✅ CLEAN LOGO MAP (PNG ONLY → no SVG issues)
 const LOGO_MAP = {
-  bbc: 'https://upload.wikimedia.org/wikipedia/commons/4/4c/BBC_News_2022_%28Alt%29.svg',
-  cnn: 'https://upload.wikimedia.org/wikipedia/commons/6/66/CNN_International_logo.svg',
-  reuters: 'https://upload.wikimedia.org/wikipedia/commons/8/86/Reuters_logo.svg',
-  espn: 'https://upload.wikimedia.org/wikipedia/commons/2/2f/ESPN_wordmark.svg',
-  ndtv: 'https://upload.wikimedia.org/wikipedia/commons/3/3a/NDTV_logo.svg'
+  bbc: 'https://logo.clearbit.com/bbc.com',
+  cnn: 'https://logo.clearbit.com/cnn.com',
+  reuters: 'https://logo.clearbit.com/reuters.com',
+  espn: 'https://logo.clearbit.com/espn.com',
+  ndtv: 'https://logo.clearbit.com/ndtv.com'
 };
 
-let isRunning = false; // prevents duplicate execution
-
-// ================= HELPERS =================
-function getRandomNumber(min, max) {
+// ✅ HELPERS
+function random(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function generateRandomIds(count) {
+function generateIds(count) {
   return Array.from({ length: count }, () => new mongoose.Types.ObjectId());
 }
 
-function getSourceLogo(sourceName) {
+function getLogo(source) {
   const key = Object.keys(LOGO_MAP).find(k =>
-    sourceName.toLowerCase().includes(k)
+    source.toLowerCase().includes(k)
   );
 
   return key
     ? LOGO_MAP[key]
-    : `https://ui-avatars.com/api/?name=${encodeURIComponent(sourceName)}&background=random&color=fff&size=128`;
+    : `https://ui-avatars.com/api/?name=${encodeURIComponent(source)}&background=0D8ABC&color=fff`;
 }
 
-// ================= MAIN FETCH =================
+// ✅ MAIN FUNCTION
 async function fetchAndStoreNews() {
-  if (isRunning) {
-    console.log("⏳ Fetch already running, skipping...");
-    return;
-  }
-
+  if (isRunning) return;
   isRunning = true;
 
   try {
@@ -48,73 +44,51 @@ async function fetchAndStoreNews() {
     const res = await axios.get('https://newsapi.org/v2/top-headlines', {
       params: {
         country: 'in',
-        category: 'general',
-        pageSize: 50, // increased safely
+        pageSize: 40,
         apiKey: process.env.NEWS_API_KEY
       }
     });
 
     let articles = res.data?.articles || [];
 
-    if (!articles.length) {
-      console.log("⚠️ API empty → using fallback");
+    // ❌ REMOVE BAD ARTICLES
+    articles = articles.filter(a =>
+      a.title &&
+      a.url &&
+      a.title !== '[Removed]'
+    );
 
-      articles = [
-        {
-          title: "Fallback News",
-          url: "https://example.com",
-          urlToImage: "https://picsum.photos/600/400",
-          source: { name: "Fallback" }
-        }
-      ];
-    }
-
-    // ================= REMOVE DUPLICATES =================
+    // ✅ REMOVE DUPLICATES
     const seen = new Set();
-    const uniqueArticles = [];
+    const unique = articles.filter(a => {
+      if (seen.has(a.url)) return false;
+      seen.add(a.url);
+      return true;
+    });
 
-    for (let article of articles) {
-      if (!article.url || seen.has(article.url)) continue;
-      seen.add(article.url);
-      uniqueArticles.push(article);
-    }
+    console.log("🧠 Unique:", unique.length);
 
-    console.log("🧠 Unique articles:", uniqueArticles.length);
-
-    // ================= LIMIT (50–80) =================
-    const finalArticles = uniqueArticles.slice(0, 70);
-
-    // ================= STORE =================
-    for (let article of finalArticles) {
-      if (!article.title) continue;
-
+    for (let article of unique) {
       const exists = await Tweet.findOne({ articleUrl: article.url });
       if (exists) continue;
 
-      const sourceName = article.source?.name || "News";
+      const source = article.source?.name || "News";
 
-      const logo = getSourceLogo(sourceName);
+      const handle = '@' + source
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[^a-z0-9]/g, '');
 
-      const handle = '@' +
-        sourceName
-          .toLowerCase()
-          .replace(/\s+/g, '')
-          .replace(/[^a-z0-9]/g, '');
+      const logo = getLogo(source);
 
-      // keep structure similar to your old logic
-      const likes = generateRandomIds(getRandomNumber(10, 300));
-      const retweets = generateRandomIds(getRandomNumber(5, 100));
-      const replies = Array.from({ length: getRandomNumber(0, 5) }, () => ({
-        user: new mongoose.Types.ObjectId(),
-        text: "Nice update 👍",
-        createdAt: new Date()
-      }));
+      const likes = generateIds(random(20, 200));
+      const retweets = generateIds(random(5, 80));
 
       await Tweet.create({
         text: article.title,
         images: article.urlToImage ? [{ url: article.urlToImage }] : [],
         isNewsArticle: true,
-        newsSource: sourceName,
+        newsSource: source,
         newsHandle: handle,
         newsLogo: logo,
         articleUrl: article.url,
@@ -122,25 +96,25 @@ async function fetchAndStoreNews() {
 
         likes,
         retweets,
-        replies,
+        replies: [],
 
         verified: true
       });
     }
 
-    console.log("✅ News stored successfully");
+    console.log("✅ Stored successfully");
 
   } catch (err) {
-    console.error("❌ API error:", err.message);
+    console.log("⚠️ API error:", err.message);
   } finally {
     isRunning = false;
   }
 }
 
-// ================= RUN =================
+// ✅ RUN ON START
 fetchAndStoreNews();
 
-// Run every 1 hour (SAFE)
+// ✅ EVERY 1 HOUR (NO 429)
 cron.schedule('0 * * * *', fetchAndStoreNews);
 
 module.exports = fetchAndStoreNews;
