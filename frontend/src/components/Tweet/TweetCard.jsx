@@ -51,10 +51,10 @@ export default function TweetCard({ item, onLike, onRetweet, onReply, onShare, o
   };
 
   // ✅ AVATAR FIX
-  const avatar =
-    rawAuthor.avatar ||
-    (isNews ? getNewsLogo(author.name) : null) ||
-    `https://ui-avatars.com/api/?name=${author.name || 'User'}&background=0D8ABC&color=fff`;
+ const avatar =
+  rawAuthor.avatar ||
+  (isNews ? item.newsLogo : null) || // ✅ USE BACKEND LOGO
+  `https://ui-avatars.com/api/?name=${author.name || 'User'}&background=0D8ABC&color=fff`;
 
   return (
     <article className="glass rounded-[32px] p-5 shadow-glass">
