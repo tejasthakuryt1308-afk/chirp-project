@@ -1,18 +1,31 @@
 const cron = require('node-cron');
 const axios = require('axios');
-const mongoose = require('mongoose'); // Added mongoose to generate valid fake ObjectIds
+const mongoose = require('mongoose');
 const Tweet = require('../models/Tweet');
 const NewsSource = require('../models/NewsSource');
 
+// ✅ REPLACE CLEARBIT WITH STABLE LOGOS
+const LOGO_MAP = {
+  'bbc news': 'https://upload.wikimedia.org/wikipedia/commons/4/4c/BBC_News_2022_%28Alt%29.svg',
+  'cnn': 'https://upload.wikimedia.org/wikipedia/commons/6/66/CNN_International_logo.svg',
+  'reuters': 'https://upload.wikimedia.org/wikipedia/commons/8/86/Reuters_logo.svg',
+  'the new york times': 'https://upload.wikimedia.org/wikipedia/commons/7/77/The_New_York_Times_logo.png',
+  'the verge': 'https://upload.wikimedia.org/wikipedia/commons/3/3b/The_Verge_logo.svg',
+  'techcrunch': 'https://upload.wikimedia.org/wikipedia/commons/b/b9/TechCrunch_logo.svg',
+  'espn': 'https://upload.wikimedia.org/wikipedia/commons/2/2f/ESPN_wordmark.svg',
+  'ndtv': 'https://upload.wikimedia.org/wikipedia/commons/3/3a/NDTV_logo.svg'
+};
+
+// ✅ CLEAN NEWS SOURCES (NO CLEARBIT)
 const NEWS_SOURCES = [
-  { id: 'bbc-news', name: 'BBC News', handle: '@bbcnews', logo: 'https://logo.clearbit.com/bbc.com' },
-  { id: 'cnn', name: 'CNN', handle: '@cnn', logo: 'https://logo.clearbit.com/cnn.com' },
-  { id: 'the-new-york-times', name: 'The New York Times', handle: '@nytimes', logo: 'https://logo.clearbit.com/nytimes.com' },
-  { id: 'reuters', name: 'Reuters', handle: '@reuters', logo: 'https://logo.clearbit.com/reuters.com' },
-  { id: 'the-verge', name: 'The Verge', handle: '@theverge', logo: 'https://logo.clearbit.com/theverge.com' },
-  { id: 'techcrunch', name: 'TechCrunch', handle: '@techcrunch', logo: 'https://logo.clearbit.com/techcrunch.com' },
-  { id: 'espn', name: 'ESPN', handle: '@espn', logo: 'https://logo.clearbit.com/espn.com' },
-  { id: 'ndtv', name: 'NDTV', handle: '@ndtv', logo: 'https://logo.clearbit.com/ndtv.com' }
+  { id: 'bbc-news', name: 'BBC News', handle: '@bbcnews' },
+  { id: 'cnn', name: 'CNN', handle: '@cnn' },
+  { id: 'the-new-york-times', name: 'The New York Times', handle: '@nytimes' },
+  { id: 'reuters', name: 'Reuters', handle: '@reuters' },
+  { id: 'the-verge', name: 'The Verge', handle: '@theverge' },
+  { id: 'techcrunch', name: 'TechCrunch', handle: '@techcrunch' },
+  { id: 'espn', name: 'ESPN', handle: '@espn' },
+  { id: 'ndtv', name: 'NDTV', handle: '@ndtv' }
 ];
 
 const CATEGORIES = ['general', 'sports', 'technology', 'business', 'entertainment', 'health', 'science'];
@@ -32,8 +45,7 @@ function generateComments(count) {
   ];
   
   return Array(Math.min(count, 5)).fill(null).map(() => ({
-    // Use valid ObjectIds for user references to prevent Schema cast errors
-    user: new mongoose.Types.ObjectId(), 
+    user: new mongoose.Types.ObjectId(),
     text: templates[Math.floor(Math.random() * templates.length)],
     createdAt: new Date(Date.now() - Math.random() * 86400000)
   }));
@@ -43,14 +55,17 @@ async function fetchAndStoreNews() {
   try {
     console.log('🔄 Fetching news...');
     
-    // Create news sources
+    // ✅ CREATE NEWS SOURCES WITH LOGOS
     for (const source of NEWS_SOURCES) {
+      const key = source.name.toLowerCase();
+      const logo = LOGO_MAP[key] || null;
+
       await NewsSource.findOneAndUpdate(
         { handle: source.handle },
         {
           name: source.name,
           handle: source.handle,
-          logo: source.logo,
+          logo,
           verified: true,
           description: `Breaking news from ${source.name}`
         },
@@ -58,7 +73,7 @@ async function fetchAndStoreNews() {
       );
     }
 
-    // Fetch news
+    // ✅ FETCH NEWS
     for (const category of CATEGORIES) {
       const response = await axios.get('https://newsapi.org/v2/top-headlines', {
         params: {
@@ -72,20 +87,19 @@ async function fetchAndStoreNews() {
       for (const article of response.data.articles || []) {
         if (!article.title || article.title === '[Removed]') continue;
 
-        let sourceInfo = NEWS_SOURCES.find(s => 
-          article.source.name.toLowerCase().includes(s.name.toLowerCase())
+        const sourceName = article.source.name.toLowerCase();
+
+        // ✅ MATCH LOGO FROM MAP
+        const matchedKey = Object.keys(LOGO_MAP).find(key =>
+          sourceName.includes(key)
         );
 
-        if (!sourceInfo) {
-          const hostname = new URL(article.url).hostname;
-          sourceInfo = {
-            name: article.source.name,
-            handle: '@' + article.source.name.toLowerCase().replace(/\s+/g, ''),
-            logo: `https://logo.clearbit.com/${hostname}`
-          };
-        }
+        const sourceInfo = {
+          name: article.source.name,
+          handle: '@' + sourceName.replace(/\s+/g, ''),
+          logo: matchedKey ? LOGO_MAP[matchedKey] : null
+        };
 
-        // Generate realistic numbers that won't blow up the MongoDB document limit
         const likesCount = Math.floor(Math.random() * 250) + 15;
         const retweetsCount = Math.floor(likesCount * 0.3);
         const repliesCount = Math.floor(likesCount * 0.1);
@@ -97,12 +111,11 @@ async function fetchAndStoreNews() {
           text: article.title,
           images: article.urlToImage ? [{ url: article.urlToImage }] : [],
           isNewsArticle: true,
-          newsSource: sourceInfo.name, // Saves the actual channel name
+          newsSource: sourceInfo.name,
           newsHandle: sourceInfo.handle,
-          newsLogo: sourceInfo.logo,
+          newsLogo: sourceInfo.logo, // ✅ NOW ALWAYS STABLE
           articleUrl: article.url,
           category: category,
-          // Generate valid fake ObjectIds instead of raw strings to satisfy Mongoose
           likes: Array.from({ length: likesCount }, () => new mongoose.Types.ObjectId()),
           retweets: Array.from({ length: retweetsCount }, () => new mongoose.Types.ObjectId()),
           replies: generateComments(repliesCount),
