@@ -6,7 +6,6 @@ const Tweet = require('../models/Tweet');
 let isRunning = false;
 
 // ✅ 55 MINUTE BUFFERED COOLDOWN
-// Reduced from 60 to 55 minutes to prevent race conditions with the 1-hour Cron job
 const FETCH_COOLDOWN = 55 * 60 * 1000; 
 
 // ================= LOGOS =================
@@ -109,7 +108,6 @@ function cleanTitle(title) {
 // ================= MAIN FUNCTION =================
 async function fetchAndStoreNews() {
 
-  // ❌ prevent multiple runs
   if (isRunning) {
     console.log('⏸️ Already running');
     return;
@@ -122,7 +120,6 @@ async function fetchAndStoreNews() {
     console.log('🔑 API KEY:', process.env.NEWS_API_KEY ? 'Present' : 'Missing');
 
     // ✅ DB-BACKED COOLDOWN PROTECTION
-    // This protects your API limits even if the server restarts!
     const latestNews = await Tweet.findOne({ isNewsArticle: true }).sort({ createdAt: -1 });
     if (latestNews) {
         const timePassed = Date.now() - new Date(latestNews.createdAt).getTime();
@@ -133,9 +130,6 @@ async function fetchAndStoreNews() {
         }
     }
 
-    // ❌ REMOVED the `existingCount > 40` check. 
-    // It was preventing new news from being fetched once your DB had 40 items.
-
     const response = await axios.get('https://newsapi.org/v2/top-headlines', {
       params: {
         country: 'in',
@@ -144,6 +138,9 @@ async function fetchAndStoreNews() {
       },
       timeout: 10000
     });
+
+    // 👇 THIS IS THE NEW DEBUG LINE
+    console.log("🕵️ RAW API RESPONSE:", JSON.stringify(response.data, null, 2));
 
     let articles = response.data?.articles || [];
 
@@ -201,7 +198,6 @@ async function fetchAndStoreNews() {
           retweets: generateFakeIds(random(50, 500)),
           replies: generateComments(),
           verified: true,
-          // Set createdAt to Date.now() to ensure our DB cooldown check works perfectly based on fetch time
           createdAt: new Date() 
         });
 
@@ -224,7 +220,6 @@ async function fetchAndStoreNews() {
 // ================= CLEAN OLD =================
 async function cleanOldNews() {
   try {
-    // Keeps database size manageable without blocking new fetches
     const date = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const res = await Tweet.deleteMany({
