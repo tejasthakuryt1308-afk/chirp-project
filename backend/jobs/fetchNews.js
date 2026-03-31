@@ -3,6 +3,7 @@ const axios = require('axios');
 const mongoose = require('mongoose');
 const Tweet = require('../models/Tweet');
 
+// ================= LOGO MAP =================
 const LOGO_MAP = {
   bbc: 'https://upload.wikimedia.org/wikipedia/commons/4/4c/BBC_News_2022_%28Alt%29.svg',
   cnn: 'https://upload.wikimedia.org/wikipedia/commons/6/66/CNN_International_logo.svg',
@@ -11,17 +12,35 @@ const LOGO_MAP = {
   ndtv: 'https://upload.wikimedia.org/wikipedia/commons/3/3a/NDTV_logo.svg'
 };
 
-let isFetching = false; // 🚨 prevents multiple parallel calls
+let isRunning = false; // prevents duplicate execution
 
-const PAGE_SIZE = 30; // safe per request
+// ================= HELPERS =================
+function getRandomNumber(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
 
+function generateRandomIds(count) {
+  return Array.from({ length: count }, () => new mongoose.Types.ObjectId());
+}
+
+function getSourceLogo(sourceName) {
+  const key = Object.keys(LOGO_MAP).find(k =>
+    sourceName.toLowerCase().includes(k)
+  );
+
+  return key
+    ? LOGO_MAP[key]
+    : `https://ui-avatars.com/api/?name=${encodeURIComponent(sourceName)}&background=random&color=fff&size=128`;
+}
+
+// ================= MAIN FETCH =================
 async function fetchAndStoreNews() {
-  if (isFetching) {
-    console.log("⏳ Skipping fetch (already running)");
+  if (isRunning) {
+    console.log("⏳ Fetch already running, skipping...");
     return;
   }
 
-  isFetching = true;
+  isRunning = true;
 
   try {
     console.log("🔄 Fetching news...");
@@ -30,7 +49,7 @@ async function fetchAndStoreNews() {
       params: {
         country: 'in',
         category: 'general',
-        pageSize: PAGE_SIZE,
+        pageSize: 50, // increased safely
         apiKey: process.env.NEWS_API_KEY
       }
     });
@@ -38,7 +57,7 @@ async function fetchAndStoreNews() {
     let articles = res.data?.articles || [];
 
     if (!articles.length) {
-      console.log("⚠️ No articles from API, using fallback");
+      console.log("⚠️ API empty → using fallback");
 
       articles = [
         {
@@ -50,22 +69,23 @@ async function fetchAndStoreNews() {
       ];
     }
 
-    // 🚨 REMOVE DUPLICATES (by URL + title)
+    // ================= REMOVE DUPLICATES =================
     const seen = new Set();
+    const uniqueArticles = [];
 
-    const uniqueArticles = articles.filter(a => {
-      const key = a.url || a.title;
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    for (let article of articles) {
+      if (!article.url || seen.has(article.url)) continue;
+      seen.add(article.url);
+      uniqueArticles.push(article);
+    }
 
-    console.log(`🧠 Unique articles: ${uniqueArticles.length}`);
+    console.log("🧠 Unique articles:", uniqueArticles.length);
 
-    // LIMIT (50–80 tweets max)
-    const limitedArticles = uniqueArticles.slice(0, 60);
+    // ================= LIMIT (50–80) =================
+    const finalArticles = uniqueArticles.slice(0, 70);
 
-    for (const article of limitedArticles) {
+    // ================= STORE =================
+    for (let article of finalArticles) {
       if (!article.title) continue;
 
       const exists = await Tweet.findOne({ articleUrl: article.url });
@@ -73,19 +93,22 @@ async function fetchAndStoreNews() {
 
       const sourceName = article.source?.name || "News";
 
-      // LOGO LOGIC (FIXED)
-      const matchedKey = Object.keys(LOGO_MAP).find(key =>
-        sourceName.toLowerCase().includes(key)
-      );
+      const logo = getSourceLogo(sourceName);
 
-      const logo = matchedKey
-        ? LOGO_MAP[matchedKey]
-        : `https://ui-avatars.com/api/?name=${encodeURIComponent(sourceName)}&background=random&color=fff&size=128`;
+      const handle = '@' +
+        sourceName
+          .toLowerCase()
+          .replace(/\s+/g, '')
+          .replace(/[^a-z0-9]/g, '');
 
-      const handle = '@' + sourceName
-        .toLowerCase()
-        .replace(/\s+/g, '')
-        .replace(/[^a-z0-9]/g, '');
+      // keep structure similar to your old logic
+      const likes = generateRandomIds(getRandomNumber(10, 300));
+      const retweets = generateRandomIds(getRandomNumber(5, 100));
+      const replies = Array.from({ length: getRandomNumber(0, 5) }, () => ({
+        user: new mongoose.Types.ObjectId(),
+        text: "Nice update 👍",
+        createdAt: new Date()
+      }));
 
       await Tweet.create({
         text: article.title,
@@ -97,27 +120,27 @@ async function fetchAndStoreNews() {
         articleUrl: article.url,
         category: 'general',
 
-        likes: [],
-        retweets: [],
-        replies: [],
+        likes,
+        retweets,
+        replies,
 
         verified: true
       });
     }
 
-    console.log("✅ News stored");
+    console.log("✅ News stored successfully");
 
   } catch (err) {
-    console.error("❌ API error:", err.response?.status || err.message);
+    console.error("❌ API error:", err.message);
   } finally {
-    isFetching = false;
+    isRunning = false;
   }
 }
 
-// 🚨 IMPORTANT: REMOVE THIS IF ON RENDER MULTIPLE INSTANCES
-// fetchAndStoreNews();
+// ================= RUN =================
+fetchAndStoreNews();
 
-// ⏰ SAFE CRON (ONCE PER HOUR)
+// Run every 1 hour (SAFE)
 cron.schedule('0 * * * *', fetchAndStoreNews);
 
 module.exports = fetchAndStoreNews;
