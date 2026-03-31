@@ -6,26 +6,64 @@ import { formatCount, timeAgo } from '../../utils/helpers';
 export default function TweetCard({ item, onLike, onRetweet, onReply, onShare, onBookmark }) {
   const navigate = useNavigate();
 
-  // ✅ SUPPORT BOTH BACKEND FORMATS (author OR user)
-  const author = item.author || item.user || {};
+  // ✅ SUPPORT BOTH BACKEND FORMATS
+  const rawAuthor = item.author || item.user || {};
 
-  // ✅ FAKE ENGAGEMENT (if not provided)
+  // ✅ CHECK IF NEWS
+  const isNews = item.isNewsArticle;
+
+  // ✅ CLEAN HANDLE + NAME FOR NEWS
+  const author = {
+    ...rawAuthor,
+    name: isNews ? item.newsSource || rawAuthor.name || 'News' : rawAuthor.name,
+    handle: isNews
+      ? (item.newsSource || "news")
+          .toLowerCase()
+          .replace(/\s+/g, "")
+          .replace(/[^a-z0-9]/g, "")
+      : rawAuthor.handle || 'user'
+  };
+
+  // ✅ FAKE ENGAGEMENT (fallback)
   const likes = item.likes ?? Math.floor(Math.random() * 500 + 10);
   const comments = item.comments ?? Math.floor(Math.random() * 100 + 5);
   const retweets = item.retweets ?? Math.floor(Math.random() * 200 + 5);
 
-  // ✅ SAFE AVATAR
+  // ✅ NEWS LOGO FETCHER
+  const getNewsLogo = (source) => {
+    if (!source) return null;
+
+    const map = {
+      "bbc": "bbc.com",
+      "ndtv": "ndtv.com",
+      "cnn": "cnn.com",
+      "reuters": "reuters.com",
+      "theguardian": "theguardian.com",
+      "the guardian": "theguardian.com",
+      "nytimes": "nytimes.com"
+    };
+
+    const key = source.toLowerCase().replace(/\s+/g, "");
+
+    return map[key]
+      ? `https://logo.clearbit.com/${map[key]}`
+      : null;
+  };
+
+  // ✅ AVATAR FIX
   const avatar =
-    author.avatar ||
+    rawAuthor.avatar ||
+    (isNews ? getNewsLogo(author.name) : null) ||
     `https://ui-avatars.com/api/?name=${author.name || 'User'}&background=0D8ABC&color=fff`;
 
   return (
     <article className="glass rounded-[32px] p-5 shadow-glass">
-      <div className="flex gap-4">
+      {/* ✅ FIXED ALIGNMENT (TOP LEFT) */}
+      <div className="flex items-start gap-4">
 
         {/* PROFILE IMAGE */}
         <button
-          onClick={() => navigate(`/profile/${author._id || author.id || ''}`)}
+          onClick={() => navigate(`/profile/${rawAuthor._id || rawAuthor.id || ''}`)}
           className="shrink-0"
         >
           <img
@@ -41,14 +79,14 @@ export default function TweetCard({ item, onLike, onRetweet, onReply, onShare, o
           <div className="flex items-center gap-2 text-sm text-slate-400">
             <button
               className="font-semibold text-white hover:underline"
-              onClick={() => navigate(`/profile/${author._id || author.id || ''}`)}
+              onClick={() => navigate(`/profile/${rawAuthor._id || rawAuthor.id || ''}`)}
             >
               {author.name || 'Unknown'}
             </button>
 
-            <span>@{author.handle || 'user'}</span>
+            <span className="lowercase">@{author.handle}</span>
 
-            {author.verified && (
+            {rawAuthor.verified && (
               <span className="material-symbols-outlined fill text-brand-300 text-sm">
                 verified
               </span>
