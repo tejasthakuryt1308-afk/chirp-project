@@ -117,9 +117,7 @@ async function fetchAndStoreNews() {
 
   try {
     console.log('🔄 Fetching news...');
-    console.log('🔑 API KEY:', process.env.NEWS_API_KEY ? 'Present' : 'Missing');
-
-    // ✅ DB-BACKED COOLDOWN PROTECTION
+    
     const latestNews = await Tweet.findOne({ isNewsArticle: true }).sort({ createdAt: -1 });
     if (latestNews) {
         const timePassed = Date.now() - new Date(latestNews.createdAt).getTime();
@@ -130,17 +128,16 @@ async function fetchAndStoreNews() {
         }
     }
 
-    const response = await axios.get('https://newsapi.org/v2/top-headlines', {
+    // ✅ SWITCHED TO GNEWS API
+    const response = await axios.get('https://gnews.io/api/v4/top-headlines', {
       params: {
+        category: 'general',
         country: 'in',
-        pageSize: 25,
-        apiKey: process.env.NEWS_API_KEY
+        max: 25,
+        apikey: process.env.NEWS_API_KEY // GNews uses 'apikey' all lowercase
       },
       timeout: 10000
     });
-
-    // 👇 THIS IS THE NEW DEBUG LINE
-    console.log("🕵️ RAW API RESPONSE:", JSON.stringify(response.data, null, 2));
 
     let articles = response.data?.articles || [];
 
@@ -151,7 +148,7 @@ async function fetchAndStoreNews() {
       a.url &&
       a.source?.name &&
       cleanTitle(a.title) &&
-      isValidImage(a.urlToImage)
+      isValidImage(a.image) // GNews returns the image as 'image', not 'urlToImage'
     );
 
     console.log(`✅ Valid: ${validArticles.length}`);
@@ -185,7 +182,7 @@ async function fetchAndStoreNews() {
         await Tweet.create({
           text: cleanTitle(article.title),
           images: [{
-            url: article.urlToImage,
+            url: article.image, // Updated for GNews
             width: 1200,
             height: 630
           }],
