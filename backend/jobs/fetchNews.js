@@ -14,31 +14,37 @@ const NEWS_LOGOS = {
   'cnn': 'https://cdn.cnn.com/cnn/.e/img/3.0/global/misc/cnn-logo.png',
   'reuters': 'https://www.reuters.com/pf/resources/images/reuters/favicon.png',
   'espn': 'https://a.espncdn.com/favicon.ico',
-  'ndtv': 'https://drop.ndtv.com/ndtv/images/ndtv_logo.png',
   'nyt': 'https://www.nytimes.com/favicon.ico',
   'techcrunch': 'https://techcrunch.com/wp-content/uploads/2015/02/cropped-cropped-favicon-gradient.png',
   'guardian': 'https://assets.guim.co.uk/images/favicons/favicon-32x32.ico',
-  'india today': 'https://akm-img-a-in.tosshub.com/sites/all/themes/itg/logo.png'
+  // Added a few more popular international ones
+  'washington post': 'https://www.washingtonpost.com/favicon.ico',
+  'bloomberg': 'https://assets.bwbx.io/s3/javelin/public/hub/images/favicon-black-63fe5249d3.ico',
+  'fox news': 'https://global.fncstatic.com/static/v/all/img/favicon.png'
 };
 
-function getNewsLogo(sourceName) {
+// Now accepts sourceUrl to fetch perfectly accurate logos via Google
+function getNewsLogo(sourceName, sourceUrl) {
   if (!sourceName) return 'https://ui-avatars.com/api/?name=News';
 
   const key = Object.keys(NEWS_LOGOS).find(k =>
     sourceName.toLowerCase().includes(k)
   );
-
   if (key) return NEWS_LOGOS[key];
 
-  try {
-    const domain = sourceName.toLowerCase()
-      .replace(/\s+/g, '')
-      .replace(/[^a-z]/g, '') + '.com';
-
-    return `https://logo.clearbit.com/${domain}`;
-  } catch {
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(sourceName)}`;
+  // ✅ NEW: Google Favicon Fetcher (Extremely Reliable)
+  if (sourceUrl) {
+    try {
+      const domain = new URL(sourceUrl).hostname;
+      // sz=128 asks Google for a high-res 128x128 logo
+      return `https://s2.googleusercontent.com/s2/favicons?domain=${domain}&sz=128`;
+    } catch (err) {
+      console.log("Logo parse error for URL:", sourceUrl);
+    }
   }
+
+  // Final fallback
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(sourceName)}&background=random&color=fff`;
 }
 
 // ================= UTIL =================
@@ -55,7 +61,8 @@ function generateFakeIds(count) {
 // ================= COMMENTS =================
 const USERNAMES = [
   "Aarav", "Riya", "Kabir", "Ananya",
-  "Rahul", "Sneha", "Vikram", "Neha"
+  "Rahul", "Sneha", "Vikram", "Neha",
+  "John", "Sarah", "Mike", "Emma" // Added some international names
 ];
 
 const COMMENT_TEMPLATES = [
@@ -83,7 +90,7 @@ function generateComments() {
 
     return {
       user: name,
-      avatar: `https://ui-avatars.com/api/?name=${name}&background=random`,
+      avatar: `https://ui-avatars.com/api/?name=${name}&background=random&color=fff`,
       text: COMMENT_TEMPLATES[random(0, COMMENT_TEMPLATES.length - 1)],
       createdAt: new Date(Date.now() - random(0, 3600000))
     };
@@ -128,13 +135,13 @@ async function fetchAndStoreNews() {
         }
     }
 
-    // ✅ SWITCHED TO GNEWS API
     const response = await axios.get('https://gnews.io/api/v4/top-headlines', {
       params: {
         category: 'general',
-        country: 'in',
+        lang: 'en',      // ✅ FETCH ENGLISH NEWS
+        country: 'us',   // ✅ TARGET US/GLOBAL SOURCES (can also change to 'gb' for UK)
         max: 25,
-        apikey: process.env.NEWS_API_KEY // GNews uses 'apikey' all lowercase
+        apikey: process.env.NEWS_API_KEY
       },
       timeout: 10000
     });
@@ -148,7 +155,7 @@ async function fetchAndStoreNews() {
       a.url &&
       a.source?.name &&
       cleanTitle(a.title) &&
-      isValidImage(a.image) // GNews returns the image as 'image', not 'urlToImage'
+      isValidImage(a.image)
     );
 
     console.log(`✅ Valid: ${validArticles.length}`);
@@ -182,14 +189,15 @@ async function fetchAndStoreNews() {
         await Tweet.create({
           text: cleanTitle(article.title),
           images: [{
-            url: article.image, // Updated for GNews
+            url: article.image,
             width: 1200,
             height: 630
           }],
           isNewsArticle: true,
           newsSource: sourceName,
           newsHandle: handle,
-          newsLogo: getNewsLogo(sourceName),
+          // ✅ PASS BOTH NAME AND URL TO THE LOGO GETTER
+          newsLogo: getNewsLogo(sourceName, article.source.url), 
           articleUrl: article.url,
           likes: generateFakeIds(random(100, 2000)),
           retweets: generateFakeIds(random(50, 500)),
@@ -238,10 +246,7 @@ setTimeout(() => {
   fetchAndStoreNews();
 }, 15000);
 
-// ✅ CRON (every 1 hour ONLY)
 cron.schedule('0 * * * *', fetchAndStoreNews);
-
-// ✅ CLEAN DAILY
 cron.schedule('0 3 * * *', cleanOldNews);
 
 module.exports = fetchAndStoreNews;
