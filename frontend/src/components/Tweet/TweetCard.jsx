@@ -44,7 +44,7 @@ export default function TweetCard({ item, onLike, onRetweet, onReply, onShare, o
     };
 
     const key = source.toLowerCase().replace(/\s+/g, "");
-
+    console.log("NEWS DATA:", item);
     return map[key]
       ? `https://logo.clearbit.com/${map[key]}`
       : null;
